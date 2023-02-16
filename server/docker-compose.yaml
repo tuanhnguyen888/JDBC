@@ -1,0 +1,116 @@
+---
+version: '3'
+services:
+  zookeeper1:
+    image: confluentinc/cp-zookeeper:7.3.0
+    container_name: zookeeper1
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+
+#  zookeeper-2:
+#    image: confluentinc/cp-zookeeper:7.3.0
+#    environment:
+#      ZOOKEEPER_CLIENT_PORT: 2181
+#      ZOOKEEPER_TICK_TIME: 2000
+#    ports:
+#      - 32181:2181
+
+  broker1:
+    image: confluentinc/cp-kafka:7.3.0
+    container_name: broker1
+    ports:
+      - "9092:9092"
+    depends_on:
+      - zookeeper1
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper1:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_INTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,PLAINTEXT_INTERNAL://broker1:29092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+#      KAFKA_REPLICATION_FACTOR: 2
+#      KAFKA_DEFAULT_REPLICATION_FACTOR: 1
+
+#  broker-2:
+#    image: confluentinc/cp-kafka:7.3.0
+#    depends_on:
+#      - zookeeper-1
+#      - zookeeper-2
+#    ports:
+#      - 39092:39092
+#    environment:
+#      KAFKA_BROKER_ID: 2
+#      KAFKA_ZOOKEEPER_CONNECT: zookeeper-1:2181,zookeeper-2:2181
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka-2:9092,PLAINTEXT_HOST://localhost:39092
+#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+##      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 2
+##      KAFKA_REPLICATION_FACTOR: 2
+#      KAFKA_DEFAULT_REPLICATION_FACTOR: 2
+
+  
+  postgres:
+    image: 'postgres:14.0'
+    ports:
+      - "5434:5434"
+    restart: always
+    deploy:
+      mode: replicated
+      replicas: 1
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 1
+      POSTGRES_DB: users
+    volumes:
+      - type: bind
+        source: ./data/postgres
+        target: /var/lib/postgresql/data
+
+  elasticsearch:
+    image: elasticsearch:7.4.0
+    container_name: elasticsearch
+    restart: always
+    environment:
+      - xpack.security.enabled=false
+      - discovery.type=single-node
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    cap_add:
+      - IPC_LOCK
+    volumes:
+      - ./db-data/elasticsearch/:/var/lib/elasticsearch/data
+    ports:
+      - 9200:9200
+
+  cassandra:
+    image: cassandra:4.0
+    environment:
+      - CASSANDRA_CLUSTER_NAME=cassandra_cluster
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+    ports:
+      - "9042:9042"
+    volumes:
+      - ./db-data/cassandra:/var/lib/cassandra/data
+
+
+  oracle:
+    image: oracleinanutshell/oracle-xe-11g
+    ports:
+      - "1521:1521"
+    volumes:
+      - ./db-data/oracle:/u01/app/oracle/data
+    environment:
+      - ORACLE_ALLOW_REMOTE=true
+      - ORACLE_DISABLE_ASYNCH_IO=true
+
+
+  
