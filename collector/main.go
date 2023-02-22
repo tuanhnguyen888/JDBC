@@ -4,36 +4,38 @@ import (
 	"collector/database"
 	"collector/kafka"
 	"context"
+	"fmt"
+	"github.com/jasonlvhit/gocron"
 	"log"
 	"os"
 	"strconv"
+	"time"
 
-	"github.com/jasonlvhit/gocron"
 	"github.com/joho/godotenv"
 )
 
-type Config struct {
+type dbConfig struct {
 	DbName   string
-	Dns      string
+	Dsn      string
 	Host     string
 	Query    string
-	Schedule string
+	Schedule int
 }
 
-func initDatabase(config Config) database.Database {
+func initDatabase(config dbConfig) database.Database {
 
 	switch config.DbName {
 	case "postgres":
-		dataStory := database.NewPostgres(config.Dns, config.Query)
+		dataStory := database.NewPostgres(config.Dsn, config.Query)
 		return dataStory
 	case "mysql":
-		dataStory := database.NewMysql(config.Dns, config.Query)
+		dataStory := database.NewMysql(config.Dsn, config.Query)
 		return dataStory
 	case "cassandra":
 		dataStory := database.NewCassandra(config.Host, config.Query)
 		return dataStory
 	case "oracle":
-		dataStory := database.NewOracle(config.Dns, config.Query)
+		dataStory := database.NewOracle(config.Dsn, config.Query)
 		return dataStory
 	default:
 		log.Fatalf("invalid database name")
@@ -47,27 +49,57 @@ func main() {
 		log.Panic(err)
 	}
 
-	config := &Config{
-		DbName:   os.Getenv("DB_NAME"),
-		Dns:      os.Getenv("DB_DSN"),
-		Host:     os.Getenv("DB_HOST"),
-		Query:    os.Getenv("DB_QUERY"),
-		Schedule: os.Getenv("DB_SCHEDULE"),
+	// Get the number of databases
+	numDbs := 0
+	for {
+		_, ok := os.LookupEnv(fmt.Sprintf("DB_NAME_%d", numDbs))
+		if !ok {
+			break
+		}
+		numDbs++
 	}
 
-	schedule, err := strconv.Atoi(config.Schedule)
-	if err != nil {
-		log.Panic(err)
+	// Create a slice to hold the database configs
+	dbConfigs := make([]dbConfig, numDbs)
+
+	// Loop through each database config and add it to the slice
+	for i := 0; i < numDbs; i++ {
+		name, _ := os.LookupEnv(fmt.Sprintf("DB_NAME_%d", i))
+		host, _ := os.LookupEnv(fmt.Sprintf("DB_HOST_%d", i))
+		dsn, _ := os.LookupEnv(fmt.Sprintf("DB_DSN_%d", i))
+		query, _ := os.LookupEnv(fmt.Sprintf("DB_QUERY_%d", i))
+		schedule, _ := os.LookupEnv(fmt.Sprintf("DB_SCHEDULE_%d", i))
+		scheduleInt, err := strconv.Atoi(schedule)
+		if err != nil {
+			fmt.Printf("Error parsing DB_SCHEDULE_%d: %v\n", i, err)
+			os.Exit(1)
+		}
+
+		dbConfigs[i] = dbConfig{
+			DbName:   name,
+			Host:     host,
+			Dsn:      dsn,
+			Query:    query,
+			Schedule: scheduleInt,
+		}
 	}
 
+	writer := kafka.NewKafkaWriter()
 	ctx := context.Background()
-	data := initDatabase(*config)
-	write := kafka.NewKafkaWriter()
+	for _, config := range dbConfigs {
+		go func(config dbConfig) {
+			data := initDatabase(config)
 
-	err = gocron.Every(uint64(schedule)).Second().Do(data.PushLogBySchedule, *write, ctx)
-	if err != nil {
-		log.Panic(err)
+			err = gocron.Every(uint64(config.Schedule)).Second().Do(data.PushLogBySchedule, writer, ctx)
+			if err != nil {
+				log.Panic(err)
+			}
+
+			<-gocron.Start()
+		}(config)
 	}
 
-	<-gocron.Start()
+	for {
+		time.Sleep(time.Hour)
+	}
 }
