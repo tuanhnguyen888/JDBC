@@ -1,15 +1,18 @@
 package main
 
 import (
+	"collector/cache"
 	"collector/database"
 	"collector/kafka"
 	"context"
 	"fmt"
-	"github.com/jasonlvhit/gocron"
+	"github.com/go-redis/redis"
 	"log"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/jasonlvhit/gocron"
 
 	"github.com/joho/godotenv"
 )
@@ -22,11 +25,11 @@ type dbConfig struct {
 	Schedule int
 }
 
-func initDatabase(config dbConfig) database.Database {
+func initDatabase(config dbConfig, redisClient *redis.Client) database.Database {
 
 	switch config.DbName {
 	case "postgres":
-		dataStory := database.NewPostgres(config.Dsn, config.Query)
+		dataStory := database.NewPostgres(config.Dsn, config.Query, redisClient)
 		return dataStory
 	case "mysql":
 		dataStory := database.NewMysql(config.Dsn, config.Query)
@@ -84,13 +87,18 @@ func main() {
 		}
 	}
 
+	redisConn, err := cache.NewInitRedis()
+	if err != nil {
+		log.Panic(err)
+	}
+
 	writer := kafka.NewKafkaWriter()
 	ctx := context.Background()
-	for _, config := range dbConfigs {
+	for i, config := range dbConfigs {
 		go func(config dbConfig) {
-			data := initDatabase(config)
+			data := initDatabase(config, redisConn.Conn)
 
-			err = gocron.Every(uint64(config.Schedule)).Second().Do(data.PushLogBySchedule, writer, ctx)
+			err = gocron.Every(uint64(config.Schedule)).Second().Do(data.PushLogBySchedule, writer, ctx, i)
 			if err != nil {
 				log.Panic(err)
 			}

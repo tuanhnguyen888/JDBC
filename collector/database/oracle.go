@@ -27,7 +27,7 @@ func NewOracle(dsn string, query string) Database {
 	}
 }
 
-func (s *oracleStory) Execute() ([]byte, error) {
+func (s *oracleStory) Execute(stt int) ([]byte, error) {
 	var logs []map[string]interface{}
 
 	rows, err := s.DB.QueryContext(context.Background(), "SELECT * FROM employees")
@@ -75,8 +75,8 @@ func (s *oracleStory) Execute() ([]byte, error) {
 	return logsJSON, nil
 }
 
-func (s *oracleStory) PushLogBySchedule(writer kafka.Writer, ctx context.Context) {
-	logs, err := s.Execute()
+func (s *oracleStory) PushLogBySchedule(writer *kafka.Writer, ctx context.Context, stt int) {
+	logs, err := s.Execute(stt)
 	if err != nil {
 		log.Fatal(err)
 	}

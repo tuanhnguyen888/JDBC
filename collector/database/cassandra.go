@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	gocql "github.com/gocql/gocql"
+	"github.com/gocql/gocql"
 )
 
 type cassandraStory struct {
@@ -31,7 +31,7 @@ func NewCassandra(host string, query string) Database {
 	}
 }
 
-func (s *cassandraStory) Execute() ([]byte, error) {
+func (s *cassandraStory) Execute(stt int) ([]byte, error) {
 	var logs []map[string]interface{}
 
 	logs, err := s.db.Query(s.query).Iter().SliceMap()
@@ -46,8 +46,8 @@ func (s *cassandraStory) Execute() ([]byte, error) {
 	return logsJSON, nil
 }
 
-func (s *cassandraStory) PushLogBySchedule(writer kafka.Writer, ctx context.Context) {
-	logs, err := s.Execute()
+func (s *cassandraStory) PushLogBySchedule(writer *kafka.Writer, ctx context.Context, stt int) {
+	logs, err := s.Execute(stt)
 	if err != nil {
 		log.Panic(err)
 	}

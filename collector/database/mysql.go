@@ -28,7 +28,7 @@ func NewMysql(dsn string, query string) Database {
 	}
 }
 
-func (s *mysqlStory) Execute() ([]byte, error) {
+func (s *mysqlStory) Execute(stt int) ([]byte, error) {
 	var logs []map[string]interface{}
 
 	err := s.DB.Raw("SELECT * FROM servers").Scan(&logs).Error
@@ -46,8 +46,8 @@ func (s *mysqlStory) Execute() ([]byte, error) {
 	return logsJSON, nil
 }
 
-func (s *mysqlStory) PushLogBySchedule(writer kafka.Writer, ctx context.Context) {
-	logs, err := s.Execute()
+func (s *mysqlStory) PushLogBySchedule(writer *kafka.Writer, ctx context.Context, stt int) {
+	logs, err := s.Execute(stt)
 	if err != nil {
 		log.Panic(err)
 	}
